@@ -1,0 +1,15 @@
+{
+    "manifest_version": 3,
+    "name": "p5.js Hover Docs",
+    "description": "Show tooltips with p5.js documentation on hover in the web editor.",
+    "version": "0.1",
+    "permissions": ["activeTab", "scripting"],
+    "content_scripts": [
+      {
+        "matches": ["https://editor.p5js.org/*"],
+        "js": ["docs.js", "content.js"],
+        "css": ["styles.css"]
+      }
+    ]
+  }
+  

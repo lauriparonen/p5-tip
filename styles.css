@@ -1,0 +1,15 @@
+.p5-tooltip {
+    position: absolute;
+    background: #1e1e1e;
+    color: #ccc;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: monospace;
+    border: 1px solid #555;
+    border-radius: 4px;
+    z-index: 9999;
+    pointer-events: none;
+    max-width: 300px;
+    white-space: pre-wrap;
+  }
+  
