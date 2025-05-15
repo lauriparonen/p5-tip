@@ -4,10 +4,18 @@
     "description": "Show tooltips with p5.js documentation on hover in the web editor.",
     "version": "0.1",
     "permissions": ["activeTab", "scripting"],
+    "host_permissions": ["<all_urls>"],
+    "web_accessible_resources": [
+      {
+        "resources": ["p5-ref-slim.json"],
+        "matches": ["<all_urls>"]
+      }
+    ],
+
     "content_scripts": [
       {
         "matches": ["https://editor.p5js.org/*"],
-        "js": ["docs.js", "content.js"],
+        "js": ["content.js"],
         "css": ["styles.css"]
       }
     ]

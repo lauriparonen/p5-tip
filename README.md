@@ -9,11 +9,13 @@ hover over a function → get the docs. no tab-switching; no friction 🌊
 - uses pre-scraped docs from the official p5.js `.mdx` reference
 - works in the default editor.p5js.org environment
 - visual debug mode for bounding box overlay (dev only)
+- locking the tooltip by pressing ctrl
+    - enables scrolling lengthy ones
 
 ## status
 
 🧪 prototype — not yet published as a real extension  
-🧠 powered by a scraped reference json from [p5-reference-scraper](https://github.com/lauriparonen/p5-ref)
+🧠 powered by a scraped and sanitized reference json from [p5-reference-scraper](https://github.com/lauriparonen/p5-ref)
 
 ## dev
 
@@ -27,15 +29,13 @@ install locally in chrome:
 files:
 
 - `content.js`: injects tooltip logic into the page
-- `docs.js`: handles fetching + indexing the docs
+- `p5-ref-slim.json`: json file containing the sanitized documentation
 - `manifest.json`: standard extension manifest
 - `styles.css`: tooltip & debug box styling
 
 ## todo
 
--  add tooltip styling
 -  smart position near cursor
--  parse function names from tokens
 -  add caching
 -  ship a minified version
 -  publish to chrome web store?
