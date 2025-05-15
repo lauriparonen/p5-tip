@@ -100,7 +100,12 @@ tooltip.appendChild(lockIndicator);
 let isHoveringTooltip = false;
 let currentDoc = null;
 let isTooltipLocked = false;
-let currentWord = null; // Track the current word being shown
+let currentWord = null;
+let lastX = null;
+let lastY = null;
+let lastMoveTime = 0;
+const MOVE_THRESHOLD = 5; // minimum pixels moved before updating
+const THROTTLE_MS = 16; // roughly 60fps
 
 // Add styles for parameter display
 const styles = document.createElement('style');
@@ -135,6 +140,40 @@ styles.textContent = `
 `;
 document.head.appendChild(styles);
 
+function shouldUpdatePosition(x, y) {
+  if (lastX === null || lastY === null) return true;
+  
+  const dx = Math.abs(x - lastX);
+  const dy = Math.abs(y - lastY);
+  const timeSinceLastMove = Date.now() - lastMoveTime;
+  
+  return (dx > MOVE_THRESHOLD || dy > MOVE_THRESHOLD) && timeSinceLastMove >= THROTTLE_MS;
+}
+
+function updateTooltipPosition(x, y) {
+  const padding = 12;
+  const rect = tooltip.getBoundingClientRect();
+  const pageW = window.innerWidth;
+  const pageH = window.innerHeight;
+
+  // adjust X
+  if (x + rect.width + padding > pageW) {
+    x = pageW - rect.width - padding;
+  }
+
+  // flip Y if tooltip would overflow bottom
+  if (y + rect.height + padding > pageH) {
+    y = y - rect.height - padding;
+  }
+
+  tooltip.style.left = `${x + padding}px`;
+  tooltip.style.top = `${y + padding}px`;
+  
+  lastX = x;
+  lastY = y;
+  lastMoveTime = Date.now();
+}
+
 function formatSignature(word, params) {
   let signature = `${word}(`;
   if (params) {
@@ -154,27 +193,17 @@ function showTip(x, y, text, word) {
   // Only update if it's a different word/documentation
   if (currentWord === word) {
     // Just update position if needed
-    const padding = 12;
-    const rect = tooltip.getBoundingClientRect();
-    const pageW = window.innerWidth;
-    const pageH = window.innerHeight;
-
-    // adjust X
-    if (x + rect.width + padding > pageW) {
-      x = pageW - rect.width - padding;
+    if (shouldUpdatePosition(x, y)) {
+      updateTooltipPosition(x, y);
     }
-
-    // flip Y if tooltip would overflow bottom
-    if (y + rect.height + padding > pageH) {
-      y = y - rect.height - padding;
-    }
-
-    tooltip.style.left = `${x + padding}px`;
-    tooltip.style.top = `${y + padding}px`;
     return;
   }
 
   currentWord = word;
+  lastX = x;
+  lastY = y;
+  lastMoveTime = Date.now();
+  
   tooltip.innerHTML = ''; // Clear previous content
   
   const doc = docFor(word);
@@ -239,32 +268,17 @@ function showTip(x, y, text, word) {
   tooltip.appendChild(lockIndicator);
   tooltip.style.display = "block";
 
-  const padding = 12;
-  const rect = tooltip.getBoundingClientRect();
-  const pageW = window.innerWidth;
-  const pageH = window.innerHeight;
-
-  // adjust X
-  if (x + rect.width + padding > pageW) {
-    x = pageW - rect.width - padding;
-  }
-
-  // flip Y if tooltip would overflow bottom
-  if (y + rect.height + padding > pageH) {
-    y = y - rect.height - padding;
-  }
-
-  tooltip.style.left = `${x + padding}px`;
-  tooltip.style.top = `${y + padding}px`;
-  
+  updateTooltipPosition(x, y);
   lockIndicator.style.display = isTooltipLocked ? "block" : "none";
 }
 
 function hideTip() {
-  if (isTooltipLocked) return; // Don't hide if locked
+  if (isTooltipLocked) return;
   tooltip.style.display = "none";
   hideBox();
-  currentWord = null; // Reset current word when hiding
+  currentWord = null;
+  lastX = null;
+  lastY = null;
 }
 
 // Handle Control key events
@@ -298,14 +312,12 @@ tooltip.addEventListener("mouseleave", () => {
 });
 
 loadDocs(() => {
-  document.addEventListener('mousemove', e => {
-    // If tooltip is locked or we're hovering it, don't do anything
-    if (isTooltipLocked || isHoveringTooltip) {
-      return;
-    }
+  let activeElement = null;
 
+  // Handle showing tooltip when mouse enters a code element
+  document.addEventListener('mouseenter', e => {
     let tok = e.target.closest("span[class^='cm-']");
-
+    
     if (!tok) {
       const line = e.target.closest('.CodeMirror-line');
       if (line) {
@@ -321,24 +333,40 @@ loadDocs(() => {
       }
     }
 
-    if (!tok) {
-      currentDoc = null;
-      if (!isHoveringTooltip) {
-        hideTip();
-      }
-      return;
-    }
+    if (!tok) return;
 
     const word = tok.textContent.trim();
     const doc = docFor(word);
-    currentDoc = doc;
-
+    
     if (doc) {
+      activeElement = tok;
+      currentDoc = doc;
       showTip(e.pageX, e.pageY, doc.description, word);
       showBox(tok);
-    } else {
-      currentDoc = null;
+    }
+  }, true);
+
+  // Handle hiding tooltip when mouse leaves a code element
+  document.addEventListener('mouseleave', e => {
+    let tok = e.target.closest("span[class^='cm-']");
+    if (!tok) {
+      tok = e.target.closest('.CodeMirror-line');
+    }
+    
+    // If we're not moving to the tooltip itself, hide it
+    if (!isHoveringTooltip && (!e.relatedTarget || !e.relatedTarget.closest('.p5-tooltip'))) {
       hideTip();
+    }
+  }, true);
+
+  // Only update position when tooltip is already visible
+  document.addEventListener('mousemove', e => {
+    if (!tooltip.style.display || tooltip.style.display === 'none') return;
+    if (isTooltipLocked || isHoveringTooltip) return;
+
+    // Update position if we've moved enough
+    if (shouldUpdatePosition(e.pageX, e.pageY)) {
+      updateTooltipPosition(e.pageX, e.pageY);
     }
   });
 });
