@@ -102,6 +102,54 @@ let currentDoc = null;
 let isTooltipLocked = false;
 let currentWord = null; // Track the current word being shown
 
+// Add styles for parameter display
+const styles = document.createElement('style');
+styles.textContent = `
+  .p5-tooltip .signature {
+    color: #9cdcfe;
+    border-bottom: 1px solid #444;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+  }
+  .p5-tooltip .param-name {
+    color: #9cdcfe;
+  }
+  .p5-tooltip .param-type {
+    color: #4ec9b0;
+    font-style: italic;
+  }
+  .p5-tooltip .optional {
+    color: #666;
+  }
+  .p5-tooltip .description {
+    margin-top: 8px;
+    color: #d4d4d4;
+  }
+  .p5-tooltip .param-list {
+    margin-top: 4px;
+    padding-left: 12px;
+  }
+  .p5-tooltip .param-item {
+    margin: 4px 0;
+  }
+`;
+document.head.appendChild(styles);
+
+function formatSignature(word, params) {
+  let signature = `${word}(`;
+  if (params) {
+    signature += params.map(p => {
+      let paramStr = p.name;
+      if (p.optional) {
+        paramStr = `[${paramStr}]`;
+      }
+      return paramStr;
+    }).join(', ');
+  }
+  signature += ')';
+  return signature;
+}
+
 function showTip(x, y, text, word) {
   // Only update if it's a different word/documentation
   if (currentWord === word) {
@@ -128,8 +176,64 @@ function showTip(x, y, text, word) {
 
   currentWord = word;
   tooltip.innerHTML = ''; // Clear previous content
+  
+  const doc = docFor(word);
+  if (!doc) return;
+
   const content = document.createElement('div');
-  content.textContent = text;
+  
+  // Add function signature if params exist
+  if (doc.params && doc.params.length > 0) {
+    const signatureDiv = document.createElement('div');
+    signatureDiv.className = 'signature';
+    signatureDiv.textContent = formatSignature(word, doc.params);
+    content.appendChild(signatureDiv);
+
+    const paramList = document.createElement('div');
+    paramList.className = 'param-list';
+    
+    doc.params.forEach(param => {
+      const paramItem = document.createElement('div');
+      paramItem.className = 'param-item';
+      
+      const paramName = document.createElement('span');
+      paramName.className = 'param-name';
+      paramName.textContent = param.name;
+      
+      const paramType = document.createElement('span');
+      paramType.className = 'param-type';
+      paramType.textContent = `: ${param.type}`;
+      
+      paramItem.appendChild(paramName);
+      paramItem.appendChild(paramType);
+      
+      if (param.optional) {
+        const optional = document.createElement('span');
+        optional.className = 'optional';
+        optional.textContent = ' (optional)';
+        paramItem.appendChild(optional);
+      }
+      
+      if (param.description) {
+        const desc = document.createElement('div');
+        desc.className = 'description';
+        desc.textContent = param.description;
+        paramItem.appendChild(desc);
+      }
+      
+      paramList.appendChild(paramItem);
+    });
+    
+    content.appendChild(paramList);
+  }
+
+  // Add main description
+  const descDiv = document.createElement('div');
+  descDiv.className = 'description';
+  descDiv.style.marginTop = doc.params && doc.params.length > 0 ? '12px' : '0';
+  descDiv.textContent = text;
+  content.appendChild(descDiv);
+
   content.style.paddingRight = '20px'; // Make space for lock indicator
   tooltip.appendChild(content);
   tooltip.appendChild(lockIndicator);
