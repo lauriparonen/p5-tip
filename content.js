@@ -1,6 +1,9 @@
 const docs = {};
 const lru = new Map();
 const lruCap = 64;
+let db;
+const COMMON_FUNCTIONS = ['createCanvas', 'rect', 'ellipse', 'line', 'mouseX', 'mouseY', 'background', 'fill', 'stroke'];
+let remainingDocsLoaded = false;
 
 function strip(htmlString) {
   const tmp = document.createElement('div');
@@ -11,24 +14,128 @@ function strip(htmlString) {
 function docFor(sym) {
   if (lru.has(sym)) return lru.get(sym);
   const d = docs[sym];
+  if (!d && !remainingDocsLoaded) {
+    // If doc not found and remaining docs aren't loaded, load them now
+    loadRemainingDocs();
+  }
   if (!d) return null;
   lru.set(sym, d);
   if (lru.size > lruCap) lru.delete(lru.keys().next().value);
   return d;
 }
 
-function loadDocs(callback) {
-  fetch(chrome.runtime.getURL('p5-ref-slim.json')) // use the cleaned file
-    .then(r => r.json())
-    .then(raw => {
-      for (const [k, v] of Object.entries(raw)) {
-        v.description = strip(v.description || '');
-        docs[k] = v;
+// Initialize IndexedDB
+function initDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('p5DocsDB', 1);
+    
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      db = request.result;
+      resolve(db);
+    };
+    
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('docs')) {
+        db.createObjectStore('docs');
       }
+    };
+  });
+}
 
-      ['createCanvas','rect','ellipse','line','mouseX','mouseY'].forEach(docFor);
-      callback();
-    });
+async function loadRemainingDocs() {
+  if (remainingDocsLoaded) return;
+  
+  try {
+    const store = db.transaction('docs', 'readonly').objectStore('docs');
+    const request = store.get('remainingDocs');
+    
+    request.onsuccess = () => {
+      if (request.result) {
+        Object.assign(docs, request.result);
+        remainingDocsLoaded = true;
+      } else {
+        // If not in IndexedDB, fetch from file
+        fetch(chrome.runtime.getURL('p5-ref-slim.json'))
+          .then(r => r.json())
+          .then(raw => {
+            const remaining = {};
+            for (const [k, v] of Object.entries(raw)) {
+              if (!COMMON_FUNCTIONS.includes(k)) {
+                v.description = strip(v.description || '');
+                remaining[k] = v;
+                docs[k] = v;
+              }
+            }
+            // Store remaining docs in IndexedDB
+            const writeStore = db.transaction('docs', 'readwrite').objectStore('docs');
+            writeStore.put(remaining, 'remainingDocs');
+            remainingDocsLoaded = true;
+          });
+      }
+    };
+  } catch (error) {
+    console.error('Error loading remaining docs:', error);
+  }
+}
+
+async function loadDocs(callback) {
+  try {
+    await initDB();
+    const store = db.transaction('docs', 'readonly').objectStore('docs');
+    const request = store.get('commonDocs');
+    
+    request.onsuccess = async () => {
+      if (request.result) {
+        // Use cached common functions
+        Object.assign(docs, request.result);
+        callback();
+        
+        // Start loading remaining docs in background
+        setTimeout(loadRemainingDocs, 1000);
+      } else {
+        // Initial load of everything
+        const response = await fetch(chrome.runtime.getURL('p5-ref-slim.json'));
+        const raw = await response.json();
+        
+        // Split into common and remaining docs
+        const common = {};
+        const remaining = {};
+        
+        for (const [k, v] of Object.entries(raw)) {
+          v.description = strip(v.description || '');
+          if (COMMON_FUNCTIONS.includes(k)) {
+            common[k] = v;
+            docs[k] = v;
+          } else {
+            remaining[k] = v;
+          }
+        }
+        
+        // Store both separately in IndexedDB
+        const writeStore = db.transaction('docs', 'readwrite').objectStore('docs');
+        writeStore.put(common, 'commonDocs');
+        writeStore.put(remaining, 'remainingDocs');
+        
+        callback();
+        remainingDocsLoaded = true;
+      }
+    };
+  } catch (error) {
+    console.error('Error in progressive loading:', error);
+    // Fallback to original method
+    fetch(chrome.runtime.getURL('p5-ref-slim.json'))
+      .then(r => r.json())
+      .then(raw => {
+        for (const [k, v] of Object.entries(raw)) {
+          v.description = strip(v.description || '');
+          docs[k] = v;
+        }
+        callback();
+        remainingDocsLoaded = true;
+      });
+  }
 }
 
 // -------------------------------------
@@ -314,14 +421,17 @@ tooltip.addEventListener("mouseleave", () => {
 loadDocs(() => {
   let activeElement = null;
 
-  // Handle showing tooltip when mouse enters a code element
-  document.addEventListener('mouseenter', e => {
+  function findTargetElement(e) {
+    if (!(e.target instanceof Element)) return null;
+
     let tok = e.target.closest("span[class^='cm-']");
     
     if (!tok) {
       const line = e.target.closest('.CodeMirror-line');
       if (line) {
         const spans = [...line.querySelectorAll("span[class^='cm-']")];
+        if (spans.length === 0) return null;
+        
         // pick the nearest span to mouse X
         const nearest = spans.reduce((a, b) => {
           const aDist = Math.abs(a.getBoundingClientRect().left - e.clientX);
@@ -333,6 +443,12 @@ loadDocs(() => {
       }
     }
 
+    return tok;
+  }
+
+  // Handle showing tooltip when mouse enters a code element
+  document.addEventListener('mouseover', e => {
+    const tok = findTargetElement(e);
     if (!tok) return;
 
     const word = tok.textContent.trim();
@@ -347,14 +463,18 @@ loadDocs(() => {
   }, true);
 
   // Handle hiding tooltip when mouse leaves a code element
-  document.addEventListener('mouseleave', e => {
-    let tok = e.target.closest("span[class^='cm-']");
-    if (!tok) {
-      tok = e.target.closest('.CodeMirror-line');
-    }
+  document.addEventListener('mouseout', e => {
+    if (!(e.target instanceof Element)) return;
     
-    // If we're not moving to the tooltip itself, hide it
-    if (!isHoveringTooltip && (!e.relatedTarget || !e.relatedTarget.closest('.p5-tooltip'))) {
+    const tok = e.target.closest("span[class^='cm-']") || e.target.closest('.CodeMirror-line');
+    if (!tok) return;
+    
+    // Check if we're moving to the tooltip or a child of the current element
+    const relatedTarget = e.relatedTarget instanceof Element ? e.relatedTarget : null;
+    if (!isHoveringTooltip && 
+        (!relatedTarget || 
+         (!relatedTarget.closest('.p5-tooltip') && 
+          !tok.contains(relatedTarget)))) {
       hideTip();
     }
   }, true);
