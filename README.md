@@ -3,8 +3,7 @@
 browser extension that adds VScode-style hover-tooltips for [p5.js](https://p5js.org/) functions inside the p5 web editor.  
 hover over a function → get the docs. no tab-switching; no friction 🌊
 
-![example of the tooltip](https://github.com/user-attachments/assets/40eae661-a690-448b-a720-5456d496589e)
-_example_
+![image](https://github.com/user-attachments/assets/88183796-6dcb-4552-b862-37dfbfe4b668)
 
 ## features
 
