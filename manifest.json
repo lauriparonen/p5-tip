@@ -1,23 +1,20 @@
 {
-    "manifest_version": 3,
-    "name": "p5.js Hover Docs",
-    "description": "Show tooltips with p5.js documentation on hover in the web editor.",
-    "version": "0.1",
-    "permissions": ["activeTab", "scripting"],
-    "host_permissions": ["<all_urls>"],
-    "web_accessible_resources": [
-      {
-        "resources": ["p5-ref-slim.json"],
-        "matches": ["<all_urls>"]
-      }
-    ],
-
-    "content_scripts": [
-      {
-        "matches": ["https://editor.p5js.org/*"],
-        "js": ["content.js"],
-        "css": ["styles.css"]
-      }
-    ]
-  }
-  
+  "manifest_version": 3,
+  "name": "p5.js Hover Docs",
+  "description": "Show tooltips with p5.js documentation on hover in the web editor.",
+  "version": "0.3",
+  "web_accessible_resources": [
+    {
+      "resources": ["p5-ref-slim.json"],
+      "matches": ["https://editor.p5js.org/*"]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://editor.p5js.org/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

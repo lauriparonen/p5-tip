@@ -7,12 +7,31 @@ hover over a method -> display info (¯▿¯)
 
 ## features
 
-- inline tooltips with descriptions, return types, and examples
+- inline tooltips with signatures, parameter lists, return types and descriptions
 - uses pre-scraped docs from the official p5.js `.mdx` reference
 - works in the default editor.p5js.org environment
-- visual debug mode for bounding box overlay (dev only)
-- locking the tooltip by pressing ctrl
-    - enables scrolling lengthy ones
+- **anchored** to the hovered token like vscode — it doesn't chase your cursor,
+  so it doesn't flicker
+- skips comments, strings, literals and your own `function` names
+- pin the tooltip with **ctrl** to scroll long ones; **esc** (or ctrl again) releases it
+- visual debug mode for the token bounding box (dev only)
+
+## controls
+
+| key | what it does |
+| --- | --- |
+| `ctrl` | pin the open tooltip — it stays put and becomes scrollable |
+| `ctrl` / `esc` | release the pin |
+| any other key, scroll, click | dismiss |
+
+## how it stays still
+
+the tooltip lives in a shadow root (the editor's css can't reach it) and is
+`pointer-events: none` unless pinned, so it can never steal the hover from the
+token underneath. hit-testing goes through `caretRangeFromPoint` plus an exact
+rect-containment check rather than guessing the nearest `span`, which means
+blank space past the end of a line resolves to nothing. show/hide run on timers
+with hysteresis, and re-hovering the same token writes nothing to the dom at all.
 
 ## status
 
@@ -33,10 +52,17 @@ files:
 - `content.js`: injects tooltip logic into the page
 - `p5-ref-slim.json`: json file containing the sanitized documentation
 - `manifest.json`: standard extension manifest
-- `styles.css`: tooltip & debug box styling
+- `styles.css`: host element styling (the tooltip itself is styled inside the shadow root)
+
+turn on the debug overlay from the editor's devtools console:
+
+```js
+localStorage.setItem('p5tip:debug', '1'); // then reload
+```
 
 ## todo
 
--  smart position near cursor
--  add caching
--  fix occasional flickering of the tooltip when rendering
+- [x] smart position near cursor
+- [x] fix occasional flickering of the tooltip when rendering
+- [ ] don't match p5 names that are shadowed by the user's own variables
+- [ ] code examples in the tooltip
